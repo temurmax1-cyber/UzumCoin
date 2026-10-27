@@ -275,9 +275,8 @@
         </div>
     </nav>
 
-    <!-- Game Logic Script -->
+    <!-- Game Logic Script (Optimized) -->
     <script>
-        // Sizning Firebase konfiguratsiyangiz ulandi
         const firebaseConfig = {
           apiKey: "AIzaSyAjUGaBOGZjnIfc4Eh32CwZC35fmMF7tes",
           authDomain: "uzumcoin-69a75.firebaseapp.com",
@@ -293,7 +292,7 @@
         }
         const db = firebase.firestore();
 
-        const ADMIN_ID = "6680296518"; // O'zingizning Telegram ID raqamingizni yozing
+        const ADMIN_ID = "6680296518";
         let tg = window.Telegram?.WebApp;
         if (tg) tg.expand();
 
@@ -301,7 +300,6 @@
         let userId = user ? user.id.toString() : ADMIN_ID;
         let userName = user ? user.first_name : "Uzum Geymer";
 
-        // UI Initialization & Tabs
         document.getElementById('username').innerText = userName;
         document.getElementById('profile-name').innerText = userName;
         document.getElementById('user-initial').innerText = userName.charAt(0).toUpperCase();
@@ -330,6 +328,7 @@
         let level = 1;
         let dailyEarned = 0;
         let referrals = [];
+        let isDirty = false; // Bazaga o'zgarish borligini tekshiruvchi bayroq
 
         const userRef = db.collection('uzum_users').doc(userId);
 
@@ -396,19 +395,18 @@
             document.getElementById('referrals-list').innerHTML = refsHtml;
         }
 
-        // Tap Mechanics
+        // --- OPTIMIZED TAP MECHANICS (No instant DB write per tap) ---
         const tapBtn = document.getElementById('tap-btn');
         tapBtn.addEventListener('click', (e) => {
             if (energy >= tapPower) {
                 energy -= tapPower;
                 balance += tapPower;
                 dailyEarned += tapPower;
+                isDirty = true; // O'zgarish borligini belgilaymiz
 
                 updateUI();
                 showFloatingNumber(e);
                 if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
-
-                userRef.update({ balance, energy, dailyEarned });
             }
         });
 
@@ -431,10 +429,34 @@
         setInterval(() => {
             if (energy < maxEnergy) {
                 energy = Math.min(maxEnergy, energy + 3);
+                isDirty = true;
                 updateUI();
-                userRef.update({ energy });
             }
         }, 1000);
+
+        // --- BACKGROUND SYNC (Every 10 seconds syncs to Firebase safely) ---
+        setInterval(() => {
+            if (isDirty) {
+                userRef.update({
+                    balance,
+                    energy,
+                    maxEnergy,
+                    tapPower,
+                    level,
+                    dailyEarned
+                }).then(() => {
+                    isDirty = false;
+                }).catch(err => console.error("Sync error:", err));
+            }
+        }, 10000);
+
+        // Also sync when user closes or leaves the mini app
+        window.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden' && isDirty) {
+                userRef.update({ balance, energy, maxEnergy, tapPower, level, dailyEarned });
+                isDirty = false;
+            }
+        });
 
         function copyRefLink() {
             let input = document.getElementById('ref-link-input');
@@ -460,6 +482,7 @@
                 return;
             }
             updateUI();
+            isDirty = false;
             userRef.update({ balance, tapPower, maxEnergy, energy, level });
         }
 
@@ -467,6 +490,7 @@
             balance += 60;
             dailyEarned += 60;
             updateUI();
+            isDirty = false;
             userRef.update({ balance, dailyEarned });
             alert("Tabriklayman! Reklama ko'rgani uchun +60 UZUM qo'shildi.");
         }
@@ -487,6 +511,7 @@
                         balance += 300;
                         db.collection('uzum_promos').doc(code).update({ used: true, usedBy: userId });
                         updateUI();
+                        isDirty = false;
                         userRef.update({ balance });
                         alert("Tabriklayman! +300 UZUM qo'shildi!");
                         document.getElementById('promo-input').value = '';
@@ -524,6 +549,7 @@
         function completeTask(taskId, reward) {
             balance += reward;
             updateUI();
+            isDirty = false;
             userRef.update({ balance });
         }
 
