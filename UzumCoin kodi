@@ -277,21 +277,23 @@
 
     <!-- Game Logic Script -->
     <script>
+        // Sizning Firebase konfiguratsiyangiz ulandi
         const firebaseConfig = {
-            apiKey: "AIzaSyD3f-HZK1wclA2fzM1Sg8S1LRluap9qg7k",
-            authDomain: "claude-coin.firebaseapp.com",
-            projectId: "claude-coin",
-            storageBucket: "claude-coin.firebasestorage.app",
-            messagingSenderId: "478948716667",
-            appId: "1:478948716667:web:d6ed5ddd8102e7bd0e72de",
-            measurementId: "G-84V124881S"
+          apiKey: "AIzaSyAjUGaBOGZjnIfc4Eh32CwZC35fmMF7tes",
+          authDomain: "uzumcoin-69a75.firebaseapp.com",
+          projectId: "uzumcoin-69a75",
+          storageBucket: "uzumcoin-69a75.firebasestorage.app",
+          messagingSenderId: "753787710147",
+          appId: "1:753787710147:web:f1321b7336d49cd7d39076",
+          measurementId: "G-PQQ1J6GFDF"
         };
+
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
         }
         const db = firebase.firestore();
 
-        const ADMIN_ID = "6680296518";
+        const ADMIN_ID = "6680296518"; // O'zingizning Telegram ID raqamingizni yozing
         let tg = window.Telegram?.WebApp;
         if (tg) tg.expand();
 
@@ -344,7 +346,6 @@
                 referrals = data.referrals || [];
                 updateUI();
             } else {
-                // Check if started with referral
                 let startParam = tg?.initDataUnsafe?.start_param;
                 if (startParam && startParam.startsWith('ref_')) {
                     let referrerId = startParam.replace('ref_', '');
@@ -407,7 +408,6 @@
                 showFloatingNumber(e);
                 if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
 
-                // Save to DB periodically or on tap
                 userRef.update({ balance, energy, dailyEarned });
             }
         });
@@ -436,9 +436,231 @@
             }
         }, 1000);
 
-        // Copy Referral Link
         function copyRefLink() {
             let input = document.getElementById('ref-link-input');
             input.select();
             input.setSelectionRange(0, 99999);
             navigator.clipboard.writeText(input.value);
+            alert("Taklif havolasi nusxalandi!");
+        }
+
+        function buyUpgrade(type) {
+            if (type === 'tap' && balance >= 15000) {
+                balance -= 15000;
+                tapPower += 1;
+                level += 1;
+                alert("Turbo Tap muvaffaqiyatli oshirildi!");
+            } else if (type === 'energy' && balance >= 20000) {
+                balance -= 20000;
+                maxEnergy += 250;
+                energy = maxEnergy;
+                alert("Energiya sig'imi oshirildi!");
+            } else {
+                alert("Balans yetarli emas!");
+                return;
+            }
+            updateUI();
+            userRef.update({ balance, tapPower, maxEnergy, energy, level });
+        }
+
+        function watchAd() {
+            balance += 60;
+            dailyEarned += 60;
+            updateUI();
+            userRef.update({ balance, dailyEarned });
+            alert("Tabriklayman! Reklama ko'rgani uchun +60 UZUM qo'shildi.");
+        }
+
+        function redeemPromoCode() {
+            let code = document.getElementById('promo-input').value.trim();
+            if (!code || code.length !== 6) {
+                alert("Iltimos, to'g'ri 6 xonali promo kodni kiriting!");
+                return;
+            }
+
+            db.collection('uzum_promos').doc(code).get().then(doc => {
+                if (doc.exists) {
+                    let pData = doc.data();
+                    if (pData.used) {
+                        alert("Bu promo kod allaqachon ishlatilgan!");
+                    } else {
+                        balance += 300;
+                        db.collection('uzum_promos').doc(code).update({ used: true, usedBy: userId });
+                        updateUI();
+                        userRef.update({ balance });
+                        alert("Tabriklayman! +300 UZUM qo'shildi!");
+                        document.getElementById('promo-input').value = '';
+                    }
+                } else {
+                    alert("Bunday promo kod mavjud emas!");
+                }
+            });
+        }
+
+        function loadTasks() {
+            db.collection('uzum_tasks').get().then(snapshot => {
+                let html = '';
+                if (snapshot.empty) {
+                    html = '<p class="text-center text-gray-400 text-sm">Hozircha vazifalar yo\'q.</p>';
+                } else {
+                    snapshot.forEach(doc => {
+                        let t = doc.data();
+                        html += `
+                            <div class="glass-card p-4 rounded-2xl flex items-center justify-between">
+                                <div>
+                                    <h3 class="font-semibold text-sm">${t.title}</h3>
+                                    <p class="text-xs text-[#00FF3C]">+${t.reward} UZUM</p>
+                                </div>
+                                <a href="${t.link}" target="_blank" onclick="completeTask('${doc.id}', ${t.reward})" class="bg-[#00FF3C] text-slate-950 font-bold px-4 py-2 rounded-xl text-xs active:scale-95 transition">Bajarish</a>
+                            </div>
+                        `;
+                    });
+                }
+                document.getElementById('tasks-list').innerHTML = html;
+            });
+        }
+        loadTasks();
+
+        function completeTask(taskId, reward) {
+            balance += reward;
+            updateUI();
+            userRef.update({ balance });
+        }
+
+        function loadAuctions() {
+            db.collection('uzum_auctions').get().then(snapshot => {
+                let html = '';
+                if (snapshot.empty) {
+                    html = '<p class="text-center text-gray-400 text-sm">Hozircha auksionda sovg\'alar yo\'q.</p>';
+                } else {
+                    snapshot.forEach(doc => {
+                        let a = doc.data();
+                        html += `
+                            <div onclick="openAuctionDetail('${doc.id}')" class="glass-card p-4 rounded-2xl flex items-center gap-4 cursor-pointer">
+                                <img src="${a.imgUrl}" class="w-16 h-16 rounded-xl object-cover border border-purple-500/30">
+                                <div>
+                                    <h3 class="font-semibold text-sm">${a.title}</h3>
+                                    <p class="text-xs text-gray-400">Eng yuqori taklif: <span class="text-[#00FF3C] font-bold">${a.highestBid || 0} UZUM</span></p>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                document.getElementById('auction-list').innerHTML = html;
+            });
+        }
+        loadAuctions();
+
+        let currentAuctionId = null;
+        function openAuctionDetail(auctionId) {
+            currentAuctionId = auctionId;
+            db.collection('uzum_auctions').doc(auctionId).get().then(doc => {
+                let a = doc.data();
+                document.getElementById('auction-detail-content').innerHTML = `
+                    <div class="flex flex-col items-center space-y-4">
+                        <img src="${a.imgUrl}" class="w-48 h-48 rounded-2xl object-cover border border-[#00FF3C]/40">
+                        <h2 class="text-xl font-bold text-center">${a.title}</h2>
+                        <p class="text-sm text-gray-300">Joriy eng yuqori stavka: <span class="text-[#00FF3C] font-bold">${a.highestBid || 0} UZUM</span> (${a.highestBidderName || 'Hozircha stavka yo\'q'})</p>
+                        <input type="number" id="bid-amount-input" placeholder="Stavka miqdori (UZUM)" class="w-full max-w-xs p-3 rounded-xl bg-slate-900 border border-purple-500/20 text-sm text-white">
+                        <button onclick="placeBid()" class="w-full max-w-xs py-3 bg-[#00FF3C] text-slate-950 font-bold rounded-xl text-sm">Stavka qo'yish</button>
+                    </div>
+                `;
+                document.getElementById('auction-detail-view').classList.remove('hidden');
+            });
+        }
+
+        function closeAuctionDetail() {
+            document.getElementById('auction-detail-view').classList.add('hidden');
+            loadAuctions();
+        }
+
+        function placeBid() {
+            let amount = parseInt(document.getElementById('bid-amount-input').value);
+            if (!amount || amount > balance) {
+                alert("Balans yetarli emas yoki miqdor noto'g'ri!");
+                return;
+            }
+            db.collection('uzum_auctions').doc(currentAuctionId).get().then(doc => {
+                let a = doc.data();
+                if (amount <= (a.highestBid || 0)) {
+                    alert("Stavka joriy eng yuqori stavkadan ko'p bo'lishi kerak!");
+                    return;
+                }
+                db.collection('uzum_auctions').doc(currentAuctionId).update({
+                    highestBid: amount,
+                    highestBidderId: userId,
+                    highestBidderName: userName
+                }).then(() => {
+                    alert("Stavka muvaffaqiyatli qabul qilindi!");
+                    closeAuctionDetail();
+                });
+            });
+        }
+
+        if (userId === ADMIN_ID) {
+            loadAdminData();
+        }
+
+        function adminGeneratePromo() {
+            let code = Math.floor(100000 + Math.random() * 900000).toString();
+            db.collection('uzum_promos').doc(code).set({
+                code: code,
+                used: false,
+                reward: 300
+            }).then(() => {
+                document.getElementById('admin-generated-promo-display').innerText = "Yangi kod: " + code;
+            });
+        }
+
+        function adminAddTask() {
+            let title = document.getElementById('admin-task-title').value;
+            let link = document.getElementById('admin-task-link').value;
+            let reward = parseInt(document.getElementById('admin-task-reward').value);
+
+            if (!title || !link || !reward) {
+                alert("Barcha maydonlarni to'ldiring!");
+                return;
+            }
+
+            db.collection('uzum_tasks').add({ title, link, reward }).then(() => {
+                alert("Vazifa qo'shildi!");
+                loadTasks();
+            });
+        }
+
+        function adminCreateAuction() {
+            let title = document.getElementById('admin-auction-title').value;
+            let imgUrl = document.getElementById('admin-auction-img-url').value;
+            let hours = parseInt(document.getElementById('admin-auction-hours').value);
+
+            if (!title || !imgUrl || !hours) {
+                alert("Barcha maydonlarni to'ldiring!");
+                return;
+            }
+
+            db.collection('uzum_auctions').add({
+                title,
+                imgUrl,
+                highestBid: 0,
+                highestBidderId: null,
+                highestBidderName: null,
+                endTime: Date.now() + (hours * 3600 * 1000)
+            }).then(() => {
+                alert("Auksion boshlandi!");
+                loadAuctions();
+            });
+        }
+
+        function loadAdminData() {
+            db.collection('uzum_users').get().then(snapshot => {
+                let html = '';
+                snapshot.forEach(doc => {
+                    let u = doc.data();
+                    html += `<div class="p-2 bg-slate-900 rounded-lg flex justify-between"><span>${u.name}</span> <span class="text-[#00FF3C] font-bold">${u.balance || 0} UZUM</span></div>`;
+                });
+                document.getElementById('admin-users-list').innerHTML = html;
+            });
+        }
+    </script>
+</body>
+</html>
